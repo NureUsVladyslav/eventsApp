@@ -33,3 +33,19 @@ export type Ticket = {
   Price: number;
   PurchaseDate: string;
 };
+
+export type EventDetailsResponse = {
+  event: EventDetailsType;
+  tickets: Ticket[];
+  stats: {
+    ticketsCount: number;
+    organizerEvents: {
+      EventID: number;
+      Title: string;
+      EventDate: string;
+      Category: string | null;
+      BasePrice: number;
+      SeatsTotal: number;
+    }[];
+  };
+};

@@ -29,7 +29,7 @@ router.get("/", async (_req, res, next) => {
   }
 });
 
-// 2) Докладна інформація по одній події + всі її продажі (Tickets)
+// 2) Докладна інформація по одній події + всі її продажі (Tickets) + виклик функцій
 router.get("/:id", async (req, res, next) => {
   try {
     const eventId = Number(req.params.id);
@@ -62,6 +62,8 @@ router.get("/:id", async (req, res, next) => {
       return res.status(404).json({ error: "Event not found" });
     }
 
+    const event = eventResult.recordset[0];
+
     const ticketsResult = await request.query(`
       SELECT
         TicketID,
@@ -76,9 +78,26 @@ router.get("/:id", async (req, res, next) => {
       ORDER BY PurchaseDate DESC
     `);
 
+    const ticketsCountResult = await request.query(`
+      SELECT dbo.fn_EventTicketsCount(@EventID) AS TicketsCount;
+    `);
+
+    const ticketsCount = ticketsCountResult.recordset[0]?.TicketsCount ?? 0;
+
+    const organizerEventsResult = await request.query(`
+      SELECT *
+      FROM dbo.fn_EventsByOrganizer(
+        (SELECT OrganizerID FROM Events WHERE EventID = @EventID)
+      );
+    `);
+
     res.json({
-      event: eventResult.recordset[0],
+      event,
       tickets: ticketsResult.recordset,
+      stats: {
+        ticketsCount,
+        organizerEvents: organizerEventsResult.recordset,
+      },
     });
   } catch (err) {
     next(err);

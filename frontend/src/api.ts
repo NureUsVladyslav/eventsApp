@@ -1,4 +1,4 @@
-import type { EventListItem, EventDetailsType, Ticket } from "./types";
+import type { EventListItem, EventDetailsResponse } from "./types";
 
 const API_BASE = "http://localhost:4000/api";
 
@@ -12,7 +12,7 @@ export async function fetchEvents(): Promise<EventListItem[]> {
 
 export async function fetchEventById(
   id: number
-): Promise<{ event: EventDetailsType; tickets: Ticket[] }> {
+): Promise<EventDetailsResponse> {
   const res = await fetch(`${API_BASE}/events/${id}`);
   if (!res.ok) {
     throw new Error("Не вдалося завантажити подію");

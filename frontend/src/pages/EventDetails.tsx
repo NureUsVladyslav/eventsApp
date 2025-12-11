@@ -1,21 +1,28 @@
 import { useEffect, useState } from "react";
 import { useParams, Link } from "react-router-dom";
 import { fetchEventById } from "../api";
-import type { EventDetailsType, Ticket } from "../types";
+import type { EventDetailsType, Ticket, EventDetailsResponse } from "../types";
 
 export default function EventDetails() {
   const { id } = useParams();
   const [event, setEvent] = useState<EventDetailsType | null>(null);
   const [tickets, setTickets] = useState<Ticket[]>([]);
+  const [ticketsCount, setTicketsCount] = useState<number>(0);
+  const [organizerEvents, setOrganizerEvents] = useState<
+    EventDetailsResponse["stats"]["organizerEvents"]
+  >([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     if (!id) return;
+
     fetchEventById(Number(id))
       .then((data) => {
         setEvent(data.event);
         setTickets(data.tickets);
+        setTicketsCount(data.stats.ticketsCount);
+        setOrganizerEvents(data.stats.organizerEvents);
       })
       .catch((err) => setError(err.message ?? "Помилка"))
       .finally(() => setLoading(false));
@@ -24,6 +31,8 @@ export default function EventDetails() {
   if (loading) return <p>Завантаження...</p>;
   if (error) return <p>Помилка: {error}</p>;
   if (!event) return <p>Подію не знайдено</p>;
+
+  const freeSeats = event.SeatsTotal - ticketsCount;
 
   return (
     <div style={{ padding: "20px" }}>
@@ -45,6 +54,15 @@ export default function EventDetails() {
       <p>
         <b>Місць всього:</b> {event.SeatsTotal}
       </p>
+
+      <h2>Статистика по події (через функції)</h2>
+      <p>
+        <b>Продано місць (скалярна функція):</b> {ticketsCount}
+      </p>
+      <p>
+        <b>Вільних місць:</b> {freeSeats >= 0 ? freeSeats : 0}
+      </p>
+
       <p>
         <b>Опис:</b> {event.Description}
       </p>
@@ -72,7 +90,6 @@ export default function EventDetails() {
       </p>
 
       <h2>Продажі (квитки)</h2>
-
       {tickets.length === 0 ? (
         <p>Ще немає продажів на цю подію.</p>
       ) : (
@@ -100,6 +117,21 @@ export default function EventDetails() {
             ))}
           </tbody>
         </table>
+      )}
+
+      <h2>Інші події цього організатора (таблична функція)</h2>
+      {organizerEvents.length === 0 ? (
+        <p>Інших подій цього організатора немає.</p>
+      ) : (
+        <ul>
+          {organizerEvents
+            .filter((e) => e.EventID !== event.EventID)
+            .map((e) => (
+              <li key={e.EventID}>
+                {e.Title} — {new Date(e.EventDate).toLocaleDateString()}
+              </li>
+            ))}
+        </ul>
       )}
     </div>
   );
