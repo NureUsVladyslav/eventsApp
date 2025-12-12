@@ -104,4 +104,52 @@ router.get("/:id", async (req, res, next) => {
   }
 });
 
+// Додавання нового квитка через stored procedure
+router.post("/:id/tickets", async (req, res, next) => {
+  try {
+    const eventId = Number(req.params.id);
+    const { buyerName, buyerEmail, quantity } = req.body;
+
+    if (
+      !Number.isInteger(eventId) ||
+      eventId < 1 ||
+      typeof buyerName !== "string" ||
+      typeof buyerEmail !== "string" ||
+      typeof quantity !== "number" ||
+      !Number.isInteger(quantity) ||
+      quantity < 1 ||
+      buyerName.trim().length === 0 ||
+      buyerEmail.trim().length === 0
+    ) {
+      return res.status(400).json({ error: "Некоректні дані" });
+    }
+
+    const pool = await getPool();
+    const request = pool.request();
+
+    request.input("EventID", sql.Int, eventId);
+    request.input("BuyerName", sql.NVarChar(150), buyerName.trim());
+    request.input("BuyerEmail", sql.NVarChar(150), buyerEmail.trim());
+    request.input("Quantity", sql.Int, quantity);
+
+    const result = await request.execute("dbo.sp_AddTicket");
+    const newTicketId = result.recordset?.[0]?.NewTicketID;
+
+    const ticketSelect = await pool
+      .request()
+      .input("TicketID", sql.Int, newTicketId).query(`
+        SELECT TicketID, TicketNo, BuyerName, BuyerEmail, Quantity, Price, PurchaseDate
+        FROM Tickets
+        WHERE TicketID = @TicketID
+      `);
+
+    res.status(201).json({
+      message: "Квиток успішно додано (через процедуру)",
+      ticket: ticketSelect.recordset[0],
+    });
+  } catch (err) {
+    next(err);
+  }
+});
+
 export default router;

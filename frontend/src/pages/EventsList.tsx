@@ -1,20 +1,8 @@
 import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { fetchEvents } from "../api";
-import type { EventListItem } from "../types";
-
-function fmtDate(s: string) {
-  const d = new Date(s);
-  return Number.isNaN(d.getTime()) ? s : d.toLocaleString();
-}
-
-function money(n: number) {
-  return new Intl.NumberFormat("uk-UA", {
-    style: "currency",
-    currency: "UAH",
-    maximumFractionDigits: 0,
-  }).format(n);
-}
+import { fetchEvents } from "../api/events";
+import type { EventListItem } from "../utils/types";
+import { fmtDate, fmtMoney } from "../utils/format";
 
 type SortMode = "dateAsc" | "dateDesc";
 
@@ -135,7 +123,9 @@ export default function EventsList() {
             onClick={() => navigate(`/events/${e.EventID}`)}
             role="button"
             tabIndex={0}
-            onKeyDown={(k) => k.key === "Enter" && navigate(`/events/${e.EventID}`)}
+            onKeyDown={(k) =>
+              k.key === "Enter" && navigate(`/events/${e.EventID}`)
+            }
           >
             <div className="cardHeaderRow">
               <h3 className="eventTitle">{e.Title}</h3>
@@ -161,7 +151,7 @@ export default function EventsList() {
               </span>
             </div>
 
-            <div className="price">{money(e.BasePrice)}</div>
+            <div className="price">{fmtMoney(e.BasePrice)}</div>
             <div className="hint">Натисни, щоб відкрити деталі →</div>
           </div>
         ))}

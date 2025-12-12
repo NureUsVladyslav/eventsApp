@@ -1,100 +1,65 @@
 import { useEffect, useMemo, useState } from "react";
 import { Link, useParams } from "react-router-dom";
-import { fetchEventById } from "../api";
-import type { EventDetailsResponse, Ticket } from "../types";
+import { fetchEventById } from "../api/events";
+import type { EventDetailsResponse, Ticket } from "../utils/types";
+import { fmtDate, fmtMoney } from "../utils/format";
+import TicketPurchaseForm from "../components/TicketPurchaseForm";
 
-/* =======================
-   Types
-======================= */
 type UiState =
   | { status: "loading" }
   | { status: "error"; message: string }
   | { status: "success"; data: EventDetailsResponse };
 
-/* =======================
-   Helpers
-======================= */
-function fmtDate(value: string) {
-  const d = new Date(value);
-  return Number.isNaN(d.getTime()) ? value : d.toLocaleString();
-}
-
-function fmtMoney(value: number) {
-  return new Intl.NumberFormat("uk-UA", {
-    style: "currency",
-    currency: "UAH",
-    maximumFractionDigits: 0,
-  }).format(value);
-}
-
-/* =======================
-   Component
-======================= */
 export default function EventDetails() {
   const { id } = useParams();
   const eventId = Number(id);
 
-  const [ui, setUi] = useState<UiState>({ status: "loading" });
+  const [ui, setUi] = useState<UiState>(() =>
+    Number.isFinite(eventId)
+      ? { status: "loading" }
+      : { status: "error", message: "Некоректний ID події" }
+  );
 
-  /* ---------- Data loading ---------- */
   useEffect(() => {
+    if (!Number.isFinite(eventId)) return;
+
     let cancelled = false;
 
-    queueMicrotask(() => {
-      if (cancelled) return;
-
-      if (!Number.isFinite(eventId)) {
-        setUi({ status: "error", message: "Некоректний ID події" });
-        return;
-      }
-
-      setUi({ status: "loading" });
-
-      fetchEventById(eventId)
-        .then((data) => {
-          if (!cancelled) {
-            setUi({ status: "success", data });
-          }
-        })
-        .catch((err: unknown) => {
-          if (cancelled) return;
-          const msg = err instanceof Error ? err.message : "Помилка завантаження";
-          setUi({ status: "error", message: msg });
-        });
-    });
+    fetchEventById(eventId)
+      .then((data) => {
+        if (cancelled) return;
+        setUi({ status: "success", data });
+      })
+      .catch((err: unknown) => {
+        if (cancelled) return;
+        const msg = err instanceof Error ? err.message : "Помилка завантаження";
+        setUi({ status: "error", message: msg });
+      });
 
     return () => {
       cancelled = true;
     };
   }, [eventId]);
 
-  /* ---------- Derived data ---------- */
-  const computed = useMemo(() => {
+  const view = useMemo(() => {
     if (ui.status !== "success") return null;
 
     const { event, tickets, stats } = ui.data;
 
-    const freeSeats = Math.max(0, event.SeatsTotal - stats.ticketsCount);
+    const ticketsCount = stats.ticketsCount;
+    const freeSeats = Math.max(0, event.SeatsTotal - ticketsCount);
 
     const otherOrganizerEvents = stats.organizerEvents
       .filter((e) => e.EventID !== event.EventID)
       .slice()
       .sort(
         (a, b) =>
-          new Date(a.EventDate).getTime() -
-          new Date(b.EventDate).getTime()
+          new Date(a.EventDate).getTime() - new Date(b.EventDate).getTime()
       );
 
-    return {
-      event,
-      tickets,
-      ticketsCount: stats.ticketsCount,
-      freeSeats,
-      otherOrganizerEvents,
-    };
+    return { event, tickets, ticketsCount, freeSeats, otherOrganizerEvents };
   }, [ui]);
 
-  /* ---------- States ---------- */
   if (ui.status === "loading") {
     return <div className="container">Завантаження…</div>;
   }
@@ -116,9 +81,27 @@ export default function EventDetails() {
     );
   }
 
-  /* ---------- Success ---------- */
   const { event, tickets, ticketsCount, freeSeats, otherOrganizerEvents } =
-    computed!;
+    view!;
+  const canBuy = freeSeats > 0;
+
+  const onTicketCreated = (newTicket: Ticket) => {
+    setUi((prev) => {
+      if (prev.status !== "success") return prev;
+
+      return {
+        status: "success",
+        data: {
+          ...prev.data,
+          tickets: [newTicket, ...prev.data.tickets],
+          stats: {
+            ...prev.data.stats,
+            ticketsCount: prev.data.stats.ticketsCount + newTicket.Quantity,
+          },
+        },
+      };
+    });
+  };
 
   return (
     <div className="container">
@@ -128,7 +111,6 @@ export default function EventDetails() {
         </Link>
       </header>
 
-      {/* ===== Hero ===== */}
       <div className="card">
         <div className="cardHeaderRow">
           <h1 className="pageTitle" style={{ fontSize: 34, margin: 0 }}>
@@ -140,7 +122,9 @@ export default function EventDetails() {
           </span>
         </div>
 
-        <div style={{ marginTop: 10, display: "flex", gap: 8, flexWrap: "wrap" }}>
+        <div
+          style={{ marginTop: 10, display: "flex", gap: 8, flexWrap: "wrap" }}
+        >
           <span className="badge badgeAccent">
             <span className="badgeDot" />
             {event.Category ?? "Без категорії"}
@@ -167,7 +151,6 @@ export default function EventDetails() {
         </p>
       </div>
 
-      {/* ===== Statistics ===== */}
       <h2 className="h2">Статистика</h2>
       <div
         className="gridCards"
@@ -175,7 +158,9 @@ export default function EventDetails() {
       >
         <div className="card">
           <div className="muted">Місць всього</div>
-          <div style={{ fontSize: 26, fontWeight: 800 }}>{event.SeatsTotal}</div>
+          <div style={{ fontSize: 26, fontWeight: 800 }}>
+            {event.SeatsTotal}
+          </div>
         </div>
 
         <div className="card">
@@ -194,55 +179,21 @@ export default function EventDetails() {
         </div>
       </div>
 
-      {/* ===== Venue & Organizer ===== */}
-      <div className="gridCards" style={{ marginTop: 14 }}>
-        <div className="card">
-          <div className="cardHeaderRow">
-            <h2 className="h2" style={{ margin: 0 }}>
-              Майданчик
-            </h2>
-            <span className="badge">
-              <span className="badgeDot" />
-              Capacity: {event.VenueCapacity ?? "—"}
-            </span>
-          </div>
-
-          <div className="muted2">Назва</div>
-          <div style={{ fontWeight: 700 }}>{event.VenueName}</div>
-
-          <div className="muted2" style={{ marginTop: 12 }}>
-            Адреса
-          </div>
-          <div>{event.VenueAddress ?? "—"}</div>
-        </div>
-
-        <div className="card">
-          <div className="cardHeaderRow">
-            <h2 className="h2" style={{ margin: 0 }}>
-              Організатор
-            </h2>
-            <span className="badge badgeGreen">
-              <span className="badgeDot" />
-              Organizer
-            </span>
-          </div>
-
-          <div className="muted2">Імʼя</div>
-          <div style={{ fontWeight: 700 }}>{event.OrganizerName}</div>
-
-          <div className="muted2" style={{ marginTop: 12 }}>
-            Email
-          </div>
-          <div>{event.OrganizerEmail ?? "—"}</div>
-
-          <div className="muted2" style={{ marginTop: 12 }}>
-            Телефон
-          </div>
-          <div>{event.OrganizerPhone ?? "—"}</div>
-        </div>
+      <h2 className="h2">Додати квиток (процедура)</h2>
+      <div className="card">
+        {!canBuy ? (
+          <p className="muted" style={{ margin: 0 }}>
+            Немає вільних місць — додати квиток неможливо.
+          </p>
+        ) : (
+          <TicketPurchaseForm
+            eventId={eventId}
+            defaultPrice={event.BasePrice}
+            onCreated={onTicketCreated}
+          />
+        )}
       </div>
 
-      {/* ===== Tickets ===== */}
       <h2 className="h2">Продажі (Tickets)</h2>
       <div className="card">
         {tickets.length === 0 ? (
@@ -262,7 +213,7 @@ export default function EventDetails() {
               </tr>
             </thead>
             <tbody>
-              {tickets.map((t: Ticket) => (
+              {tickets.map((t) => (
                 <tr key={t.TicketID}>
                   <td style={{ fontWeight: 700 }}>{t.TicketNo}</td>
                   <td>{t.BuyerName}</td>
@@ -277,10 +228,7 @@ export default function EventDetails() {
         )}
       </div>
 
-      {/* ===== Other events ===== */}
-      <h2 className="h2">
-        Інші події цього організатора (таблична функція)
-      </h2>
+      <h2 className="h2">Інші події цього організатора (таблична функція)</h2>
 
       {otherOrganizerEvents.length === 0 ? (
         <div className="card">
