@@ -1,21 +1,23 @@
 import type { EventListItem, EventDetailsResponse } from "./types";
 
-const API_BASE = "http://localhost:4000/api";
+const API_BASE = import.meta.env.VITE_API_BASE ?? "http://localhost:4000/api";
 
-export async function fetchEvents(): Promise<EventListItem[]> {
-  const res = await fetch(`${API_BASE}/events`);
+async function handle<T>(res: Response, fallbackMsg: string): Promise<T> {
   if (!res.ok) {
-    throw new Error("Не вдалося завантажити список подій");
+    const text = await res.text().catch(() => "");
+    throw new Error(text || fallbackMsg);
   }
   return res.json();
 }
 
-export async function fetchEventById(
-  id: number
-): Promise<EventDetailsResponse> {
-  const res = await fetch(`${API_BASE}/events/${id}`);
-  if (!res.ok) {
-    throw new Error("Не вдалося завантажити подію");
-  }
-  return res.json();
+export function fetchEvents() {
+  return fetch(`${API_BASE}/events`).then((r) =>
+    handle<EventListItem[]>(r, "Не вдалося завантажити список подій")
+  );
+}
+
+export function fetchEventById(id: number) {
+  return fetch(`${API_BASE}/events/${id}`).then((r) =>
+    handle<EventDetailsResponse>(r, "Не вдалося завантажити подію")
+  );
 }
